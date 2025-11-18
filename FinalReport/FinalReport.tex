@@ -1,0 +1,141 @@
+\documentclass[aps,pra,showpacs,amsmath,amssymb,nofootinbib,longbibliography,superscriptaddress
+]{revtex4-1}
+
+%\documentclass[a4paper]{quantumarticle}
+%\newcommand{\onlinecite}{\cite}
+%\pdfoutput=1
+%\usepackage{mcite}
+%\usepackage[sort&compress,numbers]{natbib}
+%\bibliographystyle{apsrev4-1}
+
+
+\usepackage[pdftex]{graphicx}
+\usepackage[usenames,dvipsnames]{xcolor}
+\usepackage{epstopdf}
+\usepackage{tikz}    % Include the tikz package for drawing
+\usepackage{mathtools}
+
+\usepackage[normalem]{ulem}
+
+\graphicspath{{FIGs/}}
+
+ \usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+\usepackage{beramono}
+\usepackage{listings}
+
+\usepackage{lmodern}
+
+\usepackage{amssymb,amsmath,amsthm}
+
+\usepackage{bbm}
+
+\usepackage{subcaption}
+
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\usepackage{multirow}
+
+\usepackage[justification=raggedright,singlelinecheck=false]{caption}
+
+\DeclareMathAlphabet{\mathbbmsl}{U}{bbm}{m}{sl}
+
+\newtheorem{theorem}{Theorem}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\newtheorem{corollary}{Corollary}[theorem]
+\newtheorem{lemma}[theorem]{Lemma}
+\renewcommand{\qedsymbol}{$\blacksquare$}
+
+\renewcommand{\lstlistingname}{Code Block}
+
+\newcommand{\patbox}[1]{\vspace{2mm}\noindent\fbox{\parbox{0.47\textwidth}{\hspace{1mm}\parbox{\columnwidth}{\hspace{1mm}\\#1\vspace{1.5mm}}}}\\}
+
+\lstset{%
+    language          = python,
+    basicstyle        = \ttfamily,
+    keywordstyle      = \bfseries\color{blue},
+    numbers           = left,
+    numbers           = none,
+    stringstyle       = \color{magenta},
+    commentstyle      = \color{ForestGreen},
+    showstringspaces  = false,
+    frame             = single, 
+    inputencoding     = latin1,
+    breaklines        = true,
+    breakatwhitespace = true
+}
+
+\newcommand{\FRrefsec}[1]{sec.~\ref{#1}}
+\newcommand{\FRreffig}[1]{fig.~\ref{#1}}
+\newcommand{\FRrefeq}[1]{eq.~\ref{#1}}
+
+\newcommand{\ENrefsec}[1]{Sec.~\ref{#1}}
+\newcommand{\ENreffig}[1]{Fig.~\ref{#1}}
+\newcommand{\ENrefeq}[1]{Eq.~\ref{#1}}
+
+
+
+
+
+
+
+
+
+   \newenvironment{xabstract}
+{\onecolumngrid
+    \list{}{%
+        \setlength{\leftmargin}{.5in}% 
+        \setlength{\rightmargin}{\leftmargin}%
+        }%
+        \item\relax}
+        {\endlist}
+
+
+
+
+\usepackage[compat=1.1.0]{tikz-feynman}
+
+
+
+
+\usepackage[hidelinks]{hyperref}
+
+
+\begin{document}
+
+
+
+\begin{center}
+    \textbf{\Large CSC 446 Final Project -- Simulation of a Tim Hortons} \\ % Your title
+    \vspace{0.5cm} % Spacing
+    \Large Aaron Dayton, Ari van Everdingen, Kiana Gallagher\\ % Your name
+    \vspace{0.3cm} % Spacing
+    \today \\ % Current date
+\end{center}
+
+
+\section{Introduction}
+
+Hello world
+
+\textcolor{blue}{TODO - Write report}
+
+
+\begin{figure}[h!]
+    \includegraphics[width=0.5\columnwidth]{stub.png}
+    \caption{\textcolor{red}{TODO - CAPTION}}
+    \label{SphericalResonator}
+\end{figure}
+
+
+\bibliography{refs}
+
+
+\end{document}
