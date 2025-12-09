@@ -16,18 +16,18 @@ from scipy.stats import truncnorm
 ######################
 
 # FRONTEND PARAMETERS
-NUM_CASHIERS = 2
+NUM_CASHIERS = 1
 
 # KITCHEN PARAMETERS
 NUM_COOKS = 5
-NUM_BARISTAS = 5
+NUM_BARISTAS = 3
 
-NUM_PANINI = 2
+NUM_PANINI = 3
 NUM_SANDWICH = 2
-NUM_HASHBROWN_STATIONS = 1
+NUM_HASHBROWN_STATIONS = 2
 
-NUM_ESPRESSO_MAKER = 2
-NUM_DONUT_STATIONS = 1
+NUM_ESPRESSO_MAKER = 4
+NUM_DONUT_STATIONS = 2
 
 
 
@@ -72,12 +72,11 @@ def INTERARRIVAL_FUNC(x, mult):
     return 1 / ARRIVAL_RATE_FUNC(x, 1/mult)
 
 MEAN_DRIVE_THRU_INTERARRIVAL = 1
-MEAN_WALK_IN_INTERARRIVAL = 1
-MEAN_MOBILE_INTERARRIVAL = 5
-MEAN_MOBILE_FINISH_TIME = 15
+MEAN_WALK_IN_INTERARRIVAL = 1.5
+MEAN_MOBILE_INTERARRIVAL = 4
+MEAN_MOBILE_FINISH_TIME = 10
 
 MEAN_WINDOW1_SERVICE = 0.5
-MEAN_WINDOW2_SERVICE = 0.5
 MEAN_CASHIER_SERVICE = 0.5
 
 # FOOD PARAMETERS
@@ -100,10 +99,10 @@ MEAN_COFFEE_URN_BREWING_TIME = 4
 MEAN_ASSEMBLY_TIME = 0.05
 MEAN_HAND_OFF_DRIVE_THRU_TIME = 0.1
 MEAN_HAND_OFF_WALK_IN_OR_MOBILE_TIME = 0.05
-MEAN_PICKUP_TIME = 1
-PICKUP_SHELF_SLOTS = 20
+MEAN_PICKUP_TIME = 0.2
+PICKUP_SHELF_SLOTS = 15
 
-WALK_IN_DINE_IN_CHANCE = 0.5
+WALK_IN_DINE_IN_CHANCE = 0.7
 MOBILE_DINE_IN_CHANCE = 0.2
 
 NUM_LARGE_TABLES = 8
@@ -287,6 +286,8 @@ class TimHortons:
         self.drive_thru_window1_length = 10
         self.drive_thru_window2_length = 3
         self.drive_thru_freeze = False
+        self.num_turned_away = 0
+        
 
         self.next_food_id = 0 # indexing starts at 0
         
@@ -340,6 +341,7 @@ class TimHortons:
         self.pickup_self_slots = PICKUP_SHELF_SLOTS
         self.occupied_pickup_shelf_slots = 0
         self.pickup_shelf_overflow_queue = []
+        self.num_order_not_ready = 0
 
         # Seating
         self.num_large_tables = NUM_LARGE_TABLES # Fit 4 people each
@@ -348,6 +350,7 @@ class TimHortons:
         self.occupied_large_tables = 0
         self.occupied_med_tables = 0
         self.occupied_small_tables = 0
+        self.num_table_not_available = 0
 
         ##########
         # SHARED #
@@ -511,7 +514,7 @@ class TimHortons:
         food = np.random.choice(["panini", "sandwich", "hashbrown"], size=num_food) # uniform by default, but probabilities can be assigned
     
         if order_type == "mobile":
-            expected_time = self.sim_time + self.trunc_norm(MEAN_MOBILE_FINISH_TIME) # current time + 20 minutes, TODO - CHANGE THIS TO BE A RANDOM NUMBER
+            expected_time = self.sim_time + self.trunc_norm(MEAN_MOBILE_FINISH_TIME) 
         else:
             expected_time = np.inf
             
@@ -597,6 +600,7 @@ class TimHortons:
             if len(self.drive_thru_window1_queue) >= self.drive_thru_window1_length:
                 # The drive-thru is full, skip placing order
                 self.dissatisfaction_score += 10
+                self.num_turned_away += 1
                 return
 
             # CHECKING IF DRIVE-THRU WINDOW 1 IS BUSY
@@ -888,6 +892,7 @@ class TimHortons:
                 if self.sim_time > pickup_time:
                     # This handles the case of a mobile order being late.
                     # This is equivalent to throwing away an order and adding disatisfaction.
+                    self.num_order_not_ready += 1
                     self.dissatisfaction_score += order.cash_value
                 else:
                     self.occupied_pickup_shelf_slots += 1
@@ -962,6 +967,7 @@ class TimHortons:
                 if self.occupied_med_tables >= self.num_med_tables:
                     if self.occupied_large_tables >= self.num_large_tables:
                         # All tables are occupied
+                        self.num_table_not_available += 1
                         self.dissatisfaction_score += num_customers * 5 # TODO - Magic number here
                     else:
                         self.occupied_large_tables += 1
@@ -987,6 +993,7 @@ class TimHortons:
             if self.occupied_med_tables >= self.num_med_tables:
                 if self.occupied_large_tables >= self.num_large_tables:
                     # All tables are occupied
+                    self.num_table_not_available += 1
                     self.dissatisfaction_score += num_customers * 5 # TODO - Magic number here
                 else:
                     self.occupied_large_tables += 1
@@ -1005,6 +1012,7 @@ class TimHortons:
         elif num_customers == 3 or num_customers == 4:
             if self.occupied_large_tables >= self.num_large_tables:
                 # All tables are occupied
+                self.num_table_not_available += 1
                 self.dissatisfaction_score += num_customers * 5 # TODO - Magic number here
             else:
                 self.occupied_large_tables += 1
@@ -1081,6 +1089,9 @@ class TimHortons:
         print(f"Total wages: {self.total_worker_wages:.2f}")
         print(f"Net profit: {(self.total_food_profit - self.total_worker_wages):.2f}")
         print(f"Dissatisfaction score: {self.dissatisfaction_score:.2f}")
+        print(f"Number of customers turned away at drive-thru: {self.num_turned_away}")
+        print(f"Number of mobile orders not ready: {self.num_order_not_ready}")
+        print(f"Number of groups unable to find seating: {self.num_table_not_available}")
         print(f"Total sim_time: {self.sim_time:.2f}")
 
 
