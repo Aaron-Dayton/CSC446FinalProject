@@ -273,8 +273,9 @@ class TimHortons:
     ##################
     ##################
     
-    def __init__(self, end_time, warm_up_period):
+    def __init__(self, end_time, warm_up_period, print_report):
         self.warm_up_period = warm_up_period
+        self.print_report = print_report
         
         ############
         # FRONTEND #
@@ -1131,7 +1132,10 @@ class TimHortons:
 
             event.func(event.obj)
 
-        self.report()
+        if self.print_report:
+            self.report()
+
+        return self.total_food_profit - self.total_worker_wages, self.dissatisfaction_score
 
 # TODO - ADD A WARM UP TIME
 # DO NOT CHANGE THIS!
@@ -1153,3 +1157,135 @@ xs = np.linspace(0, 960, 960)
 ys = [1/INTERARRIVAL_FUNC(x, 2) for x in xs]
 
 plt.plot(xs / 60, ys)
+
+##############################################################
+
+import scipy.stats
+
+# parameter_settings is an array of dictionaries, each containing
+# settings for each parameter
+def find_best_parameters(parameter_settings):
+    K = len(parameter_settings)
+
+    # Run each system R0 times
+    means = []
+    vars = []
+    metrics = [[] for _ in range(K)]  # used for both rounds of runs
+    for i in range(K):
+        set_parameters(parameter_settings[i])
+        for r in range(R0):
+            sim = TimHortons(n, warm_up_period, False)
+            profit, dissatisfaction = sim.main()
+            metrics[i].append(calculate_metric(profit, dissatisfaction))
+
+        means.append(np.mean(metrics[i]))
+        vars.append(np.var(metrics[i], ddof=1))
+
+    print(f"initial means: {means}")
+    print(f"initial variances: {vars}")
+
+    # Calculate filtering thresholds
+    t = scipy.stats.t.ppf(q=(1 - alpha / 2) ** (1 / (K - 1)), df=R0 - 1)
+    W_ij = [
+        [filtering_threshold(vars[i], vars[j], t) for i in range(K)]
+        for j in range(K)
+    ]  # currently not considering symmetry
+
+    # Filter out obvious losers
+    idx = np.argmax(means)
+    survivors = []
+    eps = 200  # not sure what this tolerance should be
+    for i in range(K):
+        if i == idx or means[i] > means[idx] - np.max([0, W_ij[idx][i] - eps]):
+            survivors.append(True)
+        else:
+            survivors.append(False)
+
+    print(f"survivors: {survivors}")
+
+    # Second round of runs for survivors
+    for i in range(K):
+        if not survivors[i]:
+            continue
+
+        R1 = calculate_R1(h, np.sqrt(vars[i]), eps)
+        print(f"{R1 = }")
+        set_parameters(parameter_settings[i])
+        for r in range(R1 - R0):
+            sim = TimHortons(n, warm_up_period, False)
+            profit, dissatisfaction = sim.main()
+            metrics[i].append(calculate_metric(profit, dissatisfaction))
+
+    # for testing
+    m = [np.mean(metrics[i]) for i in range(K)]
+    print(f"means after R1: {m}")
+
+    # find survivor with new best mean
+    max_mean = -float("inf")
+    max_idx = -1
+    for i in range(K):
+        if not survivors[i]:
+            continue
+        m = np.mean(metrics[i])
+        if m > max_mean:
+            max_mean = m
+            max_idx = i
+
+    return max_idx, max_mean
+
+def filtering_threshold(s2i, s2j, t):
+    return t * np.sqrt((s2i + s2j) / R0)
+
+def calculate_R1(h, sd, eps):
+    return np.max([R0, int(np.ceil((h * sd / eps) ** 2))])
+
+def calculate_metric(profit, dissatisfaction):
+    return profit - dissatisfaction
+
+def set_parameters(d):
+    global NUM_CASHIERS
+    global NUM_COOKS
+    global NUM_BARISTAS
+    global NUM_PANINI
+    global NUM_SANDWICH
+    global NUM_HASHBROWN_STATIONS
+    global NUM_ESPRESSO_MAKER
+    global NUM_DONUT_STATIONS
+
+    NUM_CASHIERS = d["NUM_CASHIERS"]
+    NUM_COOKS = d["NUM_COOKS"]
+    NUM_BARISTAS = d["NUM_BARISTAS"]
+    NUM_PANINI = d["NUM_PANINI"]
+    NUM_SANDWICH = d["NUM_SANDWICH"]
+    NUM_HASHBROWN_STATIONS = d["NUM_HASHBROWN_STATIONS"]
+    NUM_ESPRESSO_MAKER = d["NUM_ESPRESSO_MAKER"]
+    NUM_DONUT_STATIONS = d["NUM_DONUT_STATIONS"]
+
+
+def make_parameter_dict(n_cash, n_cook, n_baris, n_panini, n_sandwich, n_hash, n_esp, n_donut):
+    return {
+        "NUM_CASHIERS": n_cash,
+        "NUM_COOKS": n_cook,
+        "NUM_BARISTAS": n_baris,
+        "NUM_PANINI": n_panini,
+        "NUM_SANDWICH": n_sandwich,
+        "NUM_HASHBROWN_STATIONS": n_hash,
+        "NUM_ESPRESSO_MAKER": n_esp,
+        "NUM_DONUT_STATIONS": n_donut,
+    }
+
+
+R0 = 10  # initial number of runs
+n = 840  # length of run (or day?)
+warm_up_period = 120
+alpha = 0.05
+h = 4.290  # Rinott's constant (from lecture notes)
+
+# p0 = make_parameter_dict(5, 5, 5, 2, 2, 2, 2, 2)
+# p1 = make_parameter_dict(3, 3, 3, 2, 2, 2, 2, 2)
+p2 = make_parameter_dict(2, 2, 2, 2, 2, 2, 2, 2)
+p3 = make_parameter_dict(1, 1, 1, 2, 2, 2, 2, 2)
+p4 = make_parameter_dict(0, 0, 0, 2, 2, 2, 2, 2)
+parameter_settings = [p2, p3, p4]
+
+find_best_parameters(parameter_settings)
