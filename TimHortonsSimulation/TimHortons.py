@@ -5,11 +5,9 @@
 import numpy as np
 import heapq # Event tree package
 from scipy.stats import truncnorm
-
-
-
-#############################################################################################################################################################################
-
+import scipy.stats
+from numpy.random import SeedSequence
+from numpy.random import PCG64, Generator
 
 ######################
 # TUNABLE PARAMETERS #
@@ -19,7 +17,7 @@ from scipy.stats import truncnorm
 NUM_CASHIERS = 1
 
 # KITCHEN PARAMETERS
-NUM_COOKS = 5
+NUM_COOKS = 2
 NUM_BARISTAS = 3
 
 NUM_PANINI = 3
@@ -73,7 +71,7 @@ def INTERARRIVAL_FUNC(x, mult):
 
 MEAN_DRIVE_THRU_INTERARRIVAL = 1
 MEAN_WALK_IN_INTERARRIVAL = 1.5
-MEAN_MOBILE_INTERARRIVAL = 4
+MEAN_MOBILE_INTERARRIVAL = 3
 MEAN_MOBILE_FINISH_TIME = 10
 
 MEAN_WINDOW1_SERVICE = 0.5
@@ -132,11 +130,6 @@ ESPRESSO_INGREDIENT_COST = 0.5
 DONUT_INGREDIENT_COST = 0.75
 
 MINIMUM_WAGE = 17.85
-
-
-#############################################################################################################################################################################
-
-
 
 ###########
 # CLASSES #
@@ -256,13 +249,30 @@ class Event:
     # The choice is arbitrary to us, so just return True
     def __lt__(self, other):
         return True
-    
 
+###########################
+# EVENT TREE INSTRUCTIONS #
+###########################
+##
+# NOTE - The heapq package handles all the logic, and sorts by minimul value
+##
 
+# To add an event object to the event tree in O(log(n)), do the following:
+"""  
+time = some_event_time
+event_data = Event(some_stuff)
+heapq.heappush(event_tree, (time, event_id, event_data))
+"""
 
-#############################################################################################################################################################################
+# Then to pop the event off of the event tree in O(log(n)), do the following:
+"""
+time, event = heapq.heappop(event_queue)
+"""
 
-
+# Or to peek at the next event in O(1), do the following:
+"""
+time, event = event_queue[0]
+"""
 class TimHortons:
 
     ##################
@@ -273,9 +283,10 @@ class TimHortons:
     ##################
     ##################
     
-    def __init__(self, end_time, warm_up_period, print_report):
+    def __init__(self, end_time, warm_up_period, rng_vals, print_report=True):
         self.warm_up_period = warm_up_period
         self.print_report = print_report
+        self.rng_vals = rng_vals
         
         ############
         # FRONTEND #
@@ -283,7 +294,6 @@ class TimHortons:
         self.cashiers = [Staff("cashier") for i in range(NUM_CASHIERS)]
         self.drive_thru_window = Staff("drive-thru")
 
-        # current not being used, but can easily implement balking
         self.drive_thru_window1_length = 10
         self.drive_thru_window2_length = 3
         self.drive_thru_freeze = False
@@ -376,15 +386,15 @@ class TimHortons:
         # INITIAL EVENTS #
         ##################
         # Drive-thru event
-        initial_drive_thru_arrival = self.sim_time+self.expon(INTERARRIVAL_FUNC(self.sim_time, MEAN_DRIVE_THRU_INTERARRIVAL))
+        initial_drive_thru_arrival = self.sim_time+self.expon(INTERARRIVAL_FUNC(self.sim_time, MEAN_DRIVE_THRU_INTERARRIVAL), self.rng_vals['arrival_drive_thru'])
         heapq.heappush(self.event_queue, (initial_drive_thru_arrival, Event(initial_drive_thru_arrival, self.arrival, "drive-thru")))
         
         # Walk-in event
-        initial_walk_in_arrival = self.sim_time+self.expon(INTERARRIVAL_FUNC(self.sim_time, MEAN_WALK_IN_INTERARRIVAL))
+        initial_walk_in_arrival = self.sim_time+self.expon(INTERARRIVAL_FUNC(self.sim_time, MEAN_WALK_IN_INTERARRIVAL), self.rng_vals['arrival_walk_in'])
         heapq.heappush(self.event_queue, (initial_walk_in_arrival, Event(initial_walk_in_arrival, self.arrival, "walk-in")))
 
         # Mobile event
-        initial_mobile_arrival = self.sim_time+self.expon(INTERARRIVAL_FUNC(self.sim_time, MEAN_MOBILE_INTERARRIVAL))
+        initial_mobile_arrival = self.sim_time+self.expon(INTERARRIVAL_FUNC(self.sim_time, MEAN_MOBILE_INTERARRIVAL), self.rng_vals['arrival_mobile'])
         heapq.heappush(self.event_queue, (initial_mobile_arrival, Event(initial_mobile_arrival, self.arrival, "mobile")))
 
 
@@ -404,14 +414,14 @@ class TimHortons:
     ####################
     ####################
 
-    def expon(self, mean):
+    def expon(self, mean, rng):
         """Function to generate exponential random variates."""
-        return -mean * np.log(np.random.uniform(0, 1))
+        return -mean * np.log(rng.uniform(0, 1))
 
-    def trunc_norm(self, mean):
+    def trunc_norm(self, mean,rng):
         std = mean*0.25 # standard deviation is 25% of the mean
         trun_norm_func = truncnorm(-3, 3, loc=mean, scale=std)
-        return trun_norm_func.rvs()
+        return trun_norm_func.rvs(random_state=rng)
 
     
     # priority for food and beverage items
@@ -507,15 +517,15 @@ class TimHortons:
 
     def generate_order(self, order_type):
         # TODO - Should we use correlation matrices?
-        num_customers = np.random.randint(1,5) # Generate random number in 1 to 4 (does not include 5)
-        num_drinks = np.random.randint(1, num_customers+1)
-        num_food = np.random.randint(1, num_customers+1)
+        num_customers = self.rng_vals['num_people'].integers(1,5) # Generate random number in 1 to 4 (does not include 5)
+        num_drinks = self.rng_vals['num_drinks'].integers(1, num_customers+1)
+        num_food = self.rng_vals['num_food'].integers(1, num_customers+1)
 
-        drink = np.random.choice(["coffee", "espresso", "donut"], size=num_drinks) # uniform by default, but probabilities can be assigned
-        food = np.random.choice(["panini", "sandwich", "hashbrown"], size=num_food) # uniform by default, but probabilities can be assigned
+        drink = self.rng_vals['drink_choice'].choice(["coffee", "espresso", "donut"], size=num_drinks) # uniform by default, but probabilities can be assigned
+        food = self.rng_vals['food_choice'].choice(["panini", "sandwich", "hashbrown"], size=num_food) # uniform by default, but probabilities can be assigned
     
         if order_type == "mobile":
-            expected_time = self.sim_time + self.trunc_norm(MEAN_MOBILE_FINISH_TIME) 
+            expected_time = self.sim_time + self.trunc_norm(MEAN_MOBILE_FINISH_TIME, self.rng_vals['mobile_finish_time']) 
         else:
             expected_time = np.inf
             
@@ -544,7 +554,7 @@ class TimHortons:
         if order_type == "walk-in":
             # CHECKING IF ANYONE IS IN THE QUEUEf
             if len(self.walk_in_queue) > 0:
-                order_time = self.sim_time+self.expon(MEAN_CASHIER_SERVICE)
+                order_time = self.sim_time+self.expon(MEAN_CASHIER_SERVICE, self.rng_vals['cashier_service'])
                 order_event = Event(order_time, self.place_order, (order_type, server_pos))
                 heapq.heappush(self.event_queue, (order_time, order_event))
                 del self.walk_in_queue[0]
@@ -561,7 +571,7 @@ class TimHortons:
 
             # CHECKING IF ANYONE IS IN THE QUEUE AND IF THE QUEUE CAN MOVE
             if (len(self.drive_thru_window1_queue) > 0) and (not self.drive_thru_freeze):
-                order_time = self.sim_time+self.expon(MEAN_WINDOW1_SERVICE)
+                order_time = self.sim_time+self.expon(MEAN_WINDOW1_SERVICE, self.rng_vals['window1_service'])
                 order_event = Event(order_time, self.place_order, (order_type, server_pos))
                 heapq.heappush(self.event_queue, (order_time, order_event))
                 del self.drive_thru_window1_queue[0]
@@ -573,7 +583,7 @@ class TimHortons:
     def arrival(self, arrival_type):
         if arrival_type.lower() == "walk-in":
             # SCHEDULE NEXT ARRIVAL
-            walk_in_arrival_time = self.sim_time+self.expon(INTERARRIVAL_FUNC(self.sim_time, MEAN_WALK_IN_INTERARRIVAL))
+            walk_in_arrival_time = self.sim_time+self.expon(INTERARRIVAL_FUNC(self.sim_time, MEAN_WALK_IN_INTERARRIVAL), self.rng_vals['arrival_walk_in'])
             heapq.heappush(self.event_queue, (walk_in_arrival_time, Event(walk_in_arrival_time, self.arrival, "walk-in")))
 
             # CHECKING IF CASHIERS ARE BUSY
@@ -589,13 +599,13 @@ class TimHortons:
             else:
                 self.cashiers[first_free_cashier].staff_idle = False
                 # CREATING A PLACE ORDER EVENT
-                order_time = self.sim_time+self.expon(MEAN_CASHIER_SERVICE)
+                order_time = self.sim_time+self.expon(MEAN_CASHIER_SERVICE, self.rng_vals['cashier_service'])
                 order_event = Event(order_time, self.place_order, (arrival_type, first_free_cashier))
                 heapq.heappush(self.event_queue, (order_time, order_event))
                 
         elif arrival_type.lower() == "drive-thru":
             # SCHEDULE NEXT ARRIVAL 
-            drive_thru_arrival_time = self.sim_time+self.expon(INTERARRIVAL_FUNC(self.sim_time, MEAN_DRIVE_THRU_INTERARRIVAL))
+            drive_thru_arrival_time = self.sim_time+self.expon(INTERARRIVAL_FUNC(self.sim_time, MEAN_DRIVE_THRU_INTERARRIVAL), self.rng_vals['arrival_drive_thru'])
             heapq.heappush(self.event_queue, (drive_thru_arrival_time, Event(drive_thru_arrival_time, self.arrival, "drive-thru")))
 
             if len(self.drive_thru_window1_queue) >= self.drive_thru_window1_length:
@@ -612,7 +622,7 @@ class TimHortons:
                 else:
                     self.drive_thru_window.staff_idle = False # make window 1 server busy
                     # CREATING A PLACE ORDER EVENT 
-                    order_time = self.sim_time+self.expon(MEAN_WINDOW1_SERVICE)
+                    order_time = self.sim_time+self.expon(MEAN_WINDOW1_SERVICE, self.rng_vals['window1_service'])
                     order_event = Event(order_time, self.place_order, (arrival_type, 0)) # server position is 0 because there is only one server
                     heapq.heappush(self.event_queue, (order_time, order_event))
             else:
@@ -620,7 +630,7 @@ class TimHortons:
                 
         elif arrival_type.lower() == "mobile":
             # SCHEDULE NEXT ARRIVAL
-            mobile_arrival_time = self.sim_time+self.expon(INTERARRIVAL_FUNC(self.sim_time, MEAN_MOBILE_INTERARRIVAL))
+            mobile_arrival_time = self.sim_time+self.expon(INTERARRIVAL_FUNC(self.sim_time, MEAN_MOBILE_INTERARRIVAL), self.rng_vals['arrival_mobile'])
             heapq.heappush(self.event_queue, (mobile_arrival_time, Event(mobile_arrival_time, self.arrival, "mobile")))
             
             # CREATING A PLACE ORDER EVENT
@@ -671,7 +681,7 @@ class TimHortons:
                 equip.used_slots += 1
 
                 # schedule departure
-                time = self.sim_time + self.trunc_norm(food.mean_service_time)
+                time = self.sim_time + self.trunc_norm(food.mean_service_time, self.rng_vals[food.food_type])
                 obj = (food, worker)
                 event = Event(time, self.handle_kitchen_departure, obj)
                 heapq.heappush(self.event_queue, (time, event))
@@ -707,7 +717,7 @@ class TimHortons:
                     self.coffee_urn1.used_slots = self.coffee_urn1.num_slots # Block coffee maker
 
                     # The barista who just emptied the urn fills it immediately, since it blocks other items in queue
-                    time = self.sim_time + self.trunc_norm(MEAN_BARISTA_BREW_TIME)
+                    time = self.sim_time + self.trunc_norm(MEAN_BARISTA_BREW_TIME, self.rng_vals['barista_brew_time'])
                     obj = (self.coffee_urn1, worker)
                     refill_event = Event(time, self.refill_coffee_urn_event, obj)
                     heapq.heappush(self.event_queue, (time, refill_event))
@@ -724,7 +734,7 @@ class TimHortons:
 
                     # The barista who just emptied the urn fills it immediately, since it blocks other items in queue
                     # TODO - Make truncated gaussian rather than exponential
-                    time = self.sim_time + self.trunc_norm(MEAN_BARISTA_BREW_TIME)
+                    time = self.sim_time + self.trunc_norm(MEAN_BARISTA_BREW_TIME, self.rng_vals['barista_brew_time'])
                     obj = (self.coffee_urn2, worker)
                     refill_event = Event(time, self.refill_coffee_urn_event, obj)
                     heapq.heappush(self.event_queue, (time, refill_event))
@@ -742,7 +752,7 @@ class TimHortons:
                 self.espresso_maker.used_slots += 1
 
                 # Have the barista immediately start cleaning the espresso maker
-                time = self.sim_time + self.expon(MEAN_ESPRESSO_CLEANING_TIME)
+                time = self.sim_time + self.expon(MEAN_ESPRESSO_CLEANING_TIME, self.rng_vals['espresso_clean_time'])
                 cleaning_event = Event(time, self.espresso_cleaning_event, worker)
                 heapq.heappush(self.event_queue, (time, cleaning_event))
 
@@ -783,7 +793,7 @@ class TimHortons:
             next_equip.used_slots += 1
 
             # schedule departure
-            next_time = self.sim_time + self.trunc_norm(next_food.mean_service_time)
+            next_time = self.sim_time + self.trunc_norm(next_food.mean_service_time, self.rng_vals[next_food.food_type])
             obj = (next_food, worker)
             event = Event(next_time, self.handle_kitchen_departure, obj)
             heapq.heappush(self.event_queue, (next_time, event))
@@ -800,7 +810,7 @@ class TimHortons:
 
         # Schedule a new event for when the coffee is ready
         # TODO - Make truncated gaussian rather than exponential
-        brewing_time = self.sim_time + self.trunc_norm(MEAN_COFFEE_URN_BREWING_TIME)
+        brewing_time = self.sim_time + self.trunc_norm(MEAN_COFFEE_URN_BREWING_TIME, self.rng_vals['coffee_brew_time'])
         finished_brewing_event = Event(brewing_time, self.coffee_complete_event, urn)
         heapq.heappush(self.event_queue, (brewing_time, finished_brewing_event))
 
@@ -838,7 +848,7 @@ class TimHortons:
     def handle_food_assembly_arrival(self, food):
         if self.assembler.staff_idle:
             # An assembler is available, so package the food
-            assembly_time = self.sim_time + self.expon(MEAN_ASSEMBLY_TIME)
+            assembly_time = self.sim_time + self.expon(MEAN_ASSEMBLY_TIME, self.rng_vals['assembly_time'])
             assembly_event = Event(assembly_time, self.handle_food_assembly, food)
             heapq.heappush(self.event_queue, (assembly_time, assembly_event))
 
@@ -858,9 +868,9 @@ class TimHortons:
             # Drive-thru orders take longer to hand off than walk-ins and mobile.
             handoff_time = self.sim_time
             if food.order.order_type == "drive-thru":
-                handoff_time += self.expon(MEAN_HAND_OFF_DRIVE_THRU_TIME) 
+                handoff_time += self.expon(MEAN_HAND_OFF_DRIVE_THRU_TIME, self.rng_vals['hand_off_drive_thru']) 
             else:
-                handoff_time += self.expon(MEAN_HAND_OFF_WALK_IN_OR_MOBILE_TIME)
+                handoff_time += self.expon(MEAN_HAND_OFF_WALK_IN_OR_MOBILE_TIME, self.rng_vals['hand_off_walk_in_mobile'])
 
             # No queue, just handoff immediately taking priority over any other job
             handoff_event = Event(handoff_time, self.handle_food_handoff, food.order)
@@ -869,7 +879,7 @@ class TimHortons:
             if len(self.assembler_queue) > 0:
                 # Package the next item in queue
                 next_assembly_item = self.assembler_queue.pop(0)
-                assembly_time = self.sim_time + self.expon(MEAN_ASSEMBLY_TIME)
+                assembly_time = self.sim_time + self.expon(MEAN_ASSEMBLY_TIME, self.rng_vals['assembly_time'])
                 assembly_event = Event(assembly_time, self.handle_food_assembly, next_assembly_item)
                 heapq.heappush(self.event_queue, (assembly_time, assembly_event))
             else:
@@ -887,7 +897,7 @@ class TimHortons:
                 if order.order_type == "mobile":
                     pickup_time = order.expected_time
                 else:
-                    pickup_time = self.sim_time + self.expon(MEAN_PICKUP_TIME)
+                    pickup_time = self.sim_time + self.expon(MEAN_PICKUP_TIME, self.rng_vals['pickup_time'])
 
 
                 if self.sim_time > pickup_time:
@@ -912,7 +922,7 @@ class TimHortons:
 
                 # The drive-thru can now process another customer who was previously blocked
                 if len(self.drive_thru_window1_queue) > 0:
-                    order_time = self.sim_time + self.expon(MEAN_WINDOW1_SERVICE)
+                    order_time = self.sim_time + self.expon(MEAN_WINDOW1_SERVICE, self.rng_vals['window1_service'])
                     order_event = Event(order_time, self.place_order, ("drive-thru", 0))
                     heapq.heappush(self.event_queue, (order_time, order_event))
                     del self.drive_thru_window1_queue[0]
@@ -921,7 +931,7 @@ class TimHortons:
         if len(self.assembler_queue) > 0:
             # Package the next item in queue
             next_assembly_item = self.assembler_queue.pop(0)
-            assembly_time = self.sim_time + self.expon(MEAN_ASSEMBLY_TIME)
+            assembly_time = self.sim_time + self.expon(MEAN_ASSEMBLY_TIME, self.rng_vals['assembly_time'])
             assembly_event = Event(assembly_time, self.handle_food_assembly, next_assembly_item)
             heapq.heappush(self.event_queue, (assembly_time, assembly_event))
         else:
@@ -956,7 +966,7 @@ class TimHortons:
         self.total_food_profit += order.profit
 
         # Find seating for some percentage of customers
-        if (order.order_type == "walk-in" and np.random.rand() < WALK_IN_DINE_IN_CHANCE) or (order.order_type == "mobile" and np.random.rand() < MOBILE_DINE_IN_CHANCE):
+        if (order.order_type == "walk-in" and self.rng_vals['dine_in_walk_in'].random() < WALK_IN_DINE_IN_CHANCE) or (order.order_type == "mobile" and self.rng_vals['dine_in_mobile'].random() < MOBILE_DINE_IN_CHANCE):
             self.pick_smallest_table(order.num_customers)
 
         
@@ -973,19 +983,19 @@ class TimHortons:
                     else:
                         self.occupied_large_tables += 1
 
-                        seating_time = self.sim_time + self.expon(MEAN_SEATING_TIME)
+                        seating_time = self.sim_time + self.expon(MEAN_SEATING_TIME, self.rng_vals['seating_time'])
                         seating_event = Event(seating_time, self.handle_seating_event, "large-table")
                         heapq.heappush(self.event_queue, (seating_time, seating_event))
                 else:
                     self.occupied_med_tables += 1
 
-                    seating_time = self.sim_time + self.expon(MEAN_SEATING_TIME)
+                    seating_time = self.sim_time + self.expon(MEAN_SEATING_TIME, self.rng_vals['seating_time'])
                     seating_event = Event(seating_time, self.handle_seating_event, "med-table")
                     heapq.heappush(self.event_queue, (seating_time, seating_event))
             else:
                 self.occupied_small_tables += 1
 
-                seating_time = self.sim_time + self.expon(MEAN_SEATING_TIME)
+                seating_time = self.sim_time + self.expon(MEAN_SEATING_TIME, self.rng_vals['seating_time'])
                 seating_event = Event(seating_time, self.handle_seating_event, "small-table")
                 heapq.heappush(self.event_queue, (seating_time, seating_event))
                         
@@ -999,13 +1009,13 @@ class TimHortons:
                 else:
                     self.occupied_large_tables += 1
 
-                    seating_time = self.sim_time + self.expon(MEAN_SEATING_TIME)
+                    seating_time = self.sim_time + self.expon(MEAN_SEATING_TIME, self.rng_vals['seating_time'])
                     seating_event = Event(seating_time, self.handle_seating_event, "large-table")
                     heapq.heappush(self.event_queue, (seating_time, seating_event))
             else:
                 self.occupied_med_tables += 1
 
-                seating_time = self.sim_time + self.expon(MEAN_SEATING_TIME)
+                seating_time = self.sim_time + self.expon(MEAN_SEATING_TIME, self.rng_vals['seating_time'])
                 seating_event = Event(seating_time, self.handle_seating_event, "med-table")
                 heapq.heappush(self.event_queue, (seating_time, seating_event))
 
@@ -1018,14 +1028,14 @@ class TimHortons:
             else:
                 self.occupied_large_tables += 1
 
-                seating_time = self.sim_time + self.expon(MEAN_SEATING_TIME)
+                seating_time = self.sim_time + self.expon(MEAN_SEATING_TIME, self.rng_vals['seating_time'])
                 seating_event = Event(seating_time, self.handle_seating_event, "large-table")
                 heapq.heappush(self.event_queue, (seating_time, seating_event))
             
 
     def handle_seating_event(self, table_size):
         if self.busser.staff_idle:
-            bussing_time = self.sim_time + self.expon(self.mean_bussing_time(table_size))
+            bussing_time = self.sim_time + self.expon(self.mean_bussing_time(table_size), self.rng_vals[table_size])
             bussing_event = Event(bussing_time, self.handle_bussing_event, table_size)
             heapq.heappush(self.event_queue, (bussing_time, bussing_event))
         else:
@@ -1046,7 +1056,7 @@ class TimHortons:
         # Select next job
         if len(self.busser_queue) > 0:
             next_table_size = self.busser_queue.pop(0)
-            bussing_time = self.sim_time + self.expon(bussing_time(next_table_size))
+            bussing_time = self.sim_time + self.expon(bussing_time(next_table_size), self.rng_vals['next_table_size'])
             bussing_event = Event(bussing_time, self.handle_bussing_event, next_table_size)
             heapq.heappush(self.event_queue, (bussing_time, bussing_event))
         else:
@@ -1122,6 +1132,9 @@ class TimHortons:
                     self.total_income = 0
                     self.total_food_profit = 0
                     self.dissatisfaction_score = 0
+                    self.num_turned_away = 0
+                    self.num_order_not_ready = 0
+                    self.num_table_not_available = 0
                     system_has_warmed_up = True
 
                 # Start collecting time average statistics only after the warmup period has passed
@@ -1136,20 +1149,56 @@ class TimHortons:
             self.report()
 
         return self.total_food_profit - self.total_worker_wages, self.dissatisfaction_score
+    
+    # GENERATES CRN
+MASTER_SEED = 42
 
-# TODO - ADD A WARM UP TIME
-# DO NOT CHANGE THIS!
+sq = SeedSequence(MASTER_SEED)
+subseeds_array = sq.generate_state(30)
+
+subseeds = {
+    'arrival_walk_in': subseeds_array[0],
+    'arrival_drive_thru': subseeds_array[1],
+    'arrival_mobile': subseeds_array[2],
+    'mobile_finish_time': subseeds_array[3],
+    'window1_service': subseeds_array[4],
+    'cashier_service': subseeds_array[5],
+    'panini': subseeds_array[6],
+    'hashbrown': subseeds_array[7],
+    'sandwich': subseeds_array[8],
+    'coffee': subseeds_array[9],
+    'espresso': subseeds_array[10],
+    'donut': subseeds_array[11],
+    'espresso_clean_time': subseeds_array[12],
+    'barista_brew_time': subseeds_array[13],
+    'coffee_brew_time': subseeds_array[14],
+    'assembly_time': subseeds_array[15],
+    'hand_off_drive_thru': subseeds_array[16],
+    'hand_off_walk_in_mobile': subseeds_array[17],
+    'pickup_time': subseeds_array[18],
+    'dine_in_walk_in': subseeds_array[19],
+    'dine_in_mobile': subseeds_array[20],
+    'small-table': subseeds_array[21],
+    'med-table': subseeds_array[22],
+    'large-table': subseeds_array[23],
+    'num_people': subseeds_array[24],
+    'num_drinks': subseeds_array[25],
+    'num_food': subseeds_array[26],
+    'food_choice': subseeds_array[27],
+    'drink_choice': subseeds_array[28],
+    'seating_time': subseeds_array[29]
+    }
+
+rng_streams = {
+    name: Generator(PCG64(seed)) 
+    for name, seed in subseeds.items()
+}
+
 day_length = 840
 warm_up_period = 120
-test_obj = TimHortons(day_length, warm_up_period)
+test_obj = TimHortons(day_length, warm_up_period, rng_streams)
 test_obj.main()
-
-
-
-
-
-#############################################################################################################################################################################
-
+print()
 
 import matplotlib.pyplot as plt
 
@@ -1158,14 +1207,11 @@ ys = [1/INTERARRIVAL_FUNC(x, 2) for x in xs]
 
 plt.plot(xs / 60, ys)
 
-##############################################################
-
-import scipy.stats
-
 # parameter_settings is an array of dictionaries, each containing
 # settings for each parameter
 def find_best_parameters(parameter_settings):
     K = len(parameter_settings)
+    # seeds = np.random.randint(low=1, high=1000, size=R0)
 
     # Run each system R0 times
     means = []
@@ -1174,6 +1220,7 @@ def find_best_parameters(parameter_settings):
     for i in range(K):
         set_parameters(parameter_settings[i])
         for r in range(R0):
+            # np.random.seed(seeds[r]) # reuse seeds for CRN
             sim = TimHortons(n, warm_up_period, False)
             profit, dissatisfaction = sim.main()
             metrics[i].append(calculate_metric(profit, dissatisfaction))
@@ -1281,8 +1328,9 @@ warm_up_period = 120
 alpha = 0.05
 h = 4.290  # Rinott's constant (from lecture notes)
 
-# p0 = make_parameter_dict(5, 5, 5, 2, 2, 2, 2, 2)
-# p1 = make_parameter_dict(3, 3, 3, 2, 2, 2, 2, 2)
+# n_cash, n_cook, n_baris, n_panini, n_sandwich, n_hash, n_esp, n_donut
+p0 = make_parameter_dict(5, 5, 5, 2, 2, 2, 2, 2)
+p1 = make_parameter_dict(3, 3, 3, 2, 2, 2, 2, 2)
 p2 = make_parameter_dict(2, 2, 2, 2, 2, 2, 2, 2)
 p3 = make_parameter_dict(1, 1, 1, 2, 2, 2, 2, 2)
 p4 = make_parameter_dict(0, 0, 0, 2, 2, 2, 2, 2)
