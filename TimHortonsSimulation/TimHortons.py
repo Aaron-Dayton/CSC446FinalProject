@@ -33,12 +33,6 @@ NUM_DONUT_STATIONS = 2
 ####################
 # FIXED PARAMETERS #
 ####################
-# TODO - TODO - TODO - TODO - TODO - TODO #
-# Set all of these to reasonable values   #
-# TODO - TODO - TODO - TODO - TODO - TODO #
-
-# FRONTEND PARAMETERS
-# TODO - Make these variable throughout the day
 
 # DO NOT USE THIS!!! THIS IS A HELPER FUNCTION
 def ARRIVAL_RATE_FUNC(x, mult):
@@ -340,7 +334,6 @@ class TimHortons:
         # BACKEND #
         ###########
         # Staff
-        # TODO - Do we want to have multiple assemblers?
         self.assembler = Staff("assembler")
         self.busser = Staff("busser")
 
@@ -379,7 +372,7 @@ class TimHortons:
         self.total_income = 0
         self.total_food_profit = 0
         self.total_worker_wages = 0
-        self.total_num_staff = NUM_CASHIERS + 1 + NUM_COOKS + NUM_BARISTAS + 1 + 1 # TODO - This may need to be modified
+        self.total_num_staff = NUM_CASHIERS + 1 + NUM_COOKS + NUM_BARISTAS + 1 + 1
         self.dissatisfaction_score = 0
 
         ##################
@@ -516,7 +509,6 @@ class TimHortons:
     ###################
 
     def generate_order(self, order_type):
-        # TODO - Should we use correlation matrices?
         num_customers = self.rng_vals['num_people'].integers(1,5) # Generate random number in 1 to 4 (does not include 5)
         num_drinks = self.rng_vals['num_drinks'].integers(1, num_customers+1)
         num_food = self.rng_vals['num_food'].integers(1, num_customers+1)
@@ -733,7 +725,6 @@ class TimHortons:
                     self.coffee_urn2.used_slots = self.coffee_urn2.num_slots # Block coffee maker
 
                     # The barista who just emptied the urn fills it immediately, since it blocks other items in queue
-                    # TODO - Make truncated gaussian rather than exponential
                     time = self.sim_time + self.trunc_norm(MEAN_BARISTA_BREW_TIME, self.rng_vals['barista_brew_time'])
                     obj = (self.coffee_urn2, worker)
                     refill_event = Event(time, self.refill_coffee_urn_event, obj)
@@ -779,7 +770,6 @@ class TimHortons:
                 return
 
             # Get food item with max priority
-            # TODO - Implement advanced priority system
             next_food = max(possible_food, key=self.food_priority)
             
             # remove food from kitchen_queue
@@ -809,7 +799,6 @@ class TimHortons:
         self.find_next_job(barista, dummy_food)
 
         # Schedule a new event for when the coffee is ready
-        # TODO - Make truncated gaussian rather than exponential
         brewing_time = self.sim_time + self.trunc_norm(MEAN_COFFEE_URN_BREWING_TIME, self.rng_vals['coffee_brew_time'])
         finished_brewing_event = Event(brewing_time, self.coffee_complete_event, urn)
         heapq.heappush(self.event_queue, (brewing_time, finished_brewing_event))
@@ -979,7 +968,7 @@ class TimHortons:
                     if self.occupied_large_tables >= self.num_large_tables:
                         # All tables are occupied
                         self.num_table_not_available += 1
-                        self.dissatisfaction_score += num_customers * 5 # TODO - Magic number here
+                        self.dissatisfaction_score += num_customers * 5
                     else:
                         self.occupied_large_tables += 1
 
@@ -1005,7 +994,7 @@ class TimHortons:
                 if self.occupied_large_tables >= self.num_large_tables:
                     # All tables are occupied
                     self.num_table_not_available += 1
-                    self.dissatisfaction_score += num_customers * 5 # TODO - Magic number here
+                    self.dissatisfaction_score += num_customers * 5
                 else:
                     self.occupied_large_tables += 1
 
@@ -1024,7 +1013,7 @@ class TimHortons:
             if self.occupied_large_tables >= self.num_large_tables:
                 # All tables are occupied
                 self.num_table_not_available += 1
-                self.dissatisfaction_score += num_customers * 5 # TODO - Magic number here
+                self.dissatisfaction_score += num_customers * 5
             else:
                 self.occupied_large_tables += 1
 
@@ -1056,7 +1045,7 @@ class TimHortons:
         # Select next job
         if len(self.busser_queue) > 0:
             next_table_size = self.busser_queue.pop(0)
-            bussing_time = self.sim_time + self.expon(bussing_time(next_table_size), self.rng_vals['next_table_size'])
+            bussing_time = self.sim_time + self.trunc_norm(bussing_time(next_table_size), self.rng_vals['next_table_size'])
             bussing_event = Event(bussing_time, self.handle_bussing_event, next_table_size)
             heapq.heappush(self.event_queue, (bussing_time, bussing_event))
         else:
