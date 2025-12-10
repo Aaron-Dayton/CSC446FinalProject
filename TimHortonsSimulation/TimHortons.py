@@ -1187,14 +1187,6 @@ day_length = 840
 warm_up_period = 120
 test_obj = TimHortons(day_length, warm_up_period, rng_streams)
 test_obj.main()
-print()
-
-import matplotlib.pyplot as plt
-
-xs = np.linspace(0, 960, 960)
-ys = [1/INTERARRIVAL_FUNC(x, 2) for x in xs]
-
-plt.plot(xs / 60, ys)
 
 # parameter_settings is an array of dictionaries, each containing
 # settings for each parameter
